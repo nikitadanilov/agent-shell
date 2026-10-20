@@ -92,6 +92,7 @@
 (require 'agent-shell-openai)
 (require 'agent-shell-openclaw)
 (require 'agent-shell-opencode)
+(require 'agent-shell-persistent)
 (require 'agent-shell-pi)
 (require 'agent-shell-project)
 (require 'agent-shell-prompt)
@@ -1303,6 +1304,7 @@ OUTGOING-REQUEST-DECORATOR (passed through to `acp-make-client')."
         (cons :supports-session-fork nil)
         (cons :supports-steering nil)
         (cons :resume-session-id nil)
+        (cons :resume-session-only nil)
         (cons :fork-session-id nil)
         (cons :pending-restore nil)
         (cons :prompt-capabilities nil)
@@ -5118,7 +5120,7 @@ own banner, passing along their shell-maker config."
                                    (message "Thank you!")))
    "✨ (or ask your employer to).\n\n"))
 
-(cl-defun agent-shell--start (&key config no-focus new-session session-strategy session-id fork-session-id outgoing-request-decorator cwd)
+(cl-defun agent-shell--start (&key config no-focus new-session session-strategy session-id resume-session-only fork-session-id outgoing-request-decorator cwd)
   "Programmatically start shell with CONFIG.
 
 See `agent-shell-make-agent-config' for config format.
@@ -5132,6 +5134,7 @@ Set NO-FOCUS to start in background.
 Set NEW-SESSION to start a separate new session.
 SESSION-STRATEGY overrides `agent-shell-session-strategy' buffer-locally.
 SESSION-ID resumes an existing session by its id string.
+RESUME-SESSION-ONLY prevents falling back to a new session if resuming fails.
 FORK-SESSION-ID forks an existing session by its id string.
 OUTGOING-REQUEST-DECORATOR is passed through to `acp-make-client'."
   (unless (version<= agent-shell--shell-maker-minimum-version shell-maker-version)
@@ -5258,6 +5261,7 @@ variable (see makunbound)"))
         (defalias 'agent-shell-save-session-transcript #'shell-maker-save-session-transcript))
       (when session-id
         (map-put! agent-shell--state :resume-session-id session-id))
+      (map-put! agent-shell--state :resume-session-only resume-session-only)
       (when fork-session-id
         (map-put! agent-shell--state :fork-session-id fork-session-id))
       ;; Snapshot the strategy also in case it was dynamically re-bound
@@ -7763,12 +7767,13 @@ Must provide ON-SESSION-INIT (lambda ())."
                :session-id resume-session-id
                :shell-buffer shell-buffer
                :on-session-init on-session-init))
-          ;; Resuming not supported. Start a new session.
-          (message "Resuming unsupported by agent. Starting new session.")
-          (agent-shell--emit-event :event 'session-selected)
-          (agent-shell--initiate-new-session
-           :shell-buffer shell-buffer
-           :on-session-init on-session-init))
+          (if (map-elt (agent-shell--state) :resume-session-only)
+              (agent-shell--session-resume-failed shell-buffer)
+            (message "Resuming unsupported by agent. Starting new session.")
+            (agent-shell--emit-event :event 'session-selected)
+            (agent-shell--initiate-new-session
+             :shell-buffer shell-buffer
+             :on-session-init on-session-init)))
       ;; Resuming, but must request session list first.
       (if (and (map-elt (agent-shell--state) :supports-session-list)
                (or (map-elt (agent-shell--state) :supports-session-load)
@@ -8397,6 +8402,14 @@ With `agent-shell-session-strategy' set to `prompt':
             ('prompt "Pick another session to load.")
             (_ "Starting a new one."))))
 
+(defun agent-shell--session-resume-failed (shell-buffer)
+  "Report that SHELL-BUFFER could not resume without creating a new session."
+  (with-current-buffer shell-buffer
+    (funcall (agent-shell--make-error-handler :state (agent-shell--state)
+                                            :shell-buffer shell-buffer)
+             '((message . "Could not resume the requested session. No new session was started."))
+             nil)))
+
 (cl-defun agent-shell--initiate-session-resume-by-id (&key session-id session-title shell-buffer on-session-init on-failure)
   "Resume or load session SESSION-ID with SHELL-BUFFER and ON-SESSION-INIT.
 
@@ -8459,8 +8472,11 @@ listing sessions to pick one to load."
                                        (funcall on-session-init))))
      :on-failure (lambda (_acp-error _raw-message)
                    (map-put! (agent-shell--state) :pending-restore nil)
-                   (if on-failure
-                       (funcall on-failure)
+                   (cond
+                    (on-failure (funcall on-failure))
+                    ((map-elt (agent-shell--state) :resume-session-only)
+                     (agent-shell--session-resume-failed shell-buffer))
+                    (t
                      (let ((text (agent-shell--resume-failure-message :session-id session-id)))
                        (message "%s" text)
                        (agent-shell--update-bootstrapping-fragment
@@ -8470,7 +8486,7 @@ listing sessions to pick one to load."
                                :text (concat "Warning: " text))))
                      (agent-shell--initiate-session-list-and-load
                       :shell-buffer shell-buffer
-                      :on-session-init on-session-init))))))
+                      :on-session-init on-session-init)))))))
 
 (cl-defun agent-shell--initiate-session-fork-by-id (&key session-id shell-buffer on-session-init)
   "Fork session SESSION-ID with SHELL-BUFFER and ON-SESSION-INIT."

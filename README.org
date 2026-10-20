@@ -787,6 +787,22 @@ By default, =agent-shell= includes configurations for all supported agents (Clau
 
 You can select and start any of the known agent shells (see =agent-shell-agent-configs=) via the =agent-shell= interactive command and enables reusing existing shells when available. With a prefix argument (=C-u M-x agent-shell=), it forces starting a new shell session, thus instantiating multiple agent shells.
 
+*** Persistent shells
+
+Run =M-x agent-shell-persistent-mode= in a shell to remember it across Emacs restarts.  Run it again to forget that shell.  Killing a persistent buffer does not forget it.
+
+The record contains the session identifier, buffer name, working directory and agent configuration identifier.  Buffer renames are saved automatically, including renames made with =rename-buffer=.  A shell marked before its session starts is saved once initialisation succeeds.  Conversation contents and credentials are not saved.
+
+To make newly started shells persistent by default:
+
+#+begin_src emacs-lisp
+(setopt agent-shell-persistent-default t)
+#+end_src
+
+Run =M-x agent-shell-restore-persistent= to restore all remembered shells in the background.  Existing or still-starting shells are reused.  The agent must support loading or resuming the saved session; a failed restore never substitutes a new conversation.  Missing agents or directories leave their records intact so restoration can be retried.  If a buffer name is already occupied, Emacs supplies a unique name rather than replacing that buffer.
+
+Records are stored in =agent-shell-persistent-file=, by default =agent-shell/persistent-sessions.el= beneath =user-emacs-directory=.  This owner-only file contains data, not code to load.  Use a separate file for each concurrently running Emacs instance.  Restoration is explicit, not automatic at startup.
+
 *** Viewport interaction
 
 Viewport is an alternative interface for composing prompts and viewing one request/response interaction at a time.  It uses a separate buffer named after its associated shell with =" [viewport]"= appended.  This buffer switches between =agent-shell-viewport-edit-mode= while composing and =agent-shell-viewport-view-mode= while reading.
