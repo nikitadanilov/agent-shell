@@ -803,6 +803,12 @@ Run =M-x agent-shell-restore-persistent= to restore all remembered shells in the
 
 Records are stored in =agent-shell-persistent-file=, by default =agent-shell/persistent-sessions.el= beneath =user-emacs-directory=.  This owner-only file contains data, not code to load.  Use a separate file for each concurrently running Emacs instance.  Restoration is explicit, not automatic at startup.
 
+*** Live shell activity
+
+=M-x agent-shell-top= displays all open shells with their buffer names, status and working directories.  The buffer refreshes every second, including while you are typing elsewhere.  Status is =busy= while processing, =blocked= while waiting for a response and =ready= while idle.
+
+Use =RET= to visit the shell on the current row, =g= to refresh immediately and =q= to close the overview and stop its timer.  Click a column heading to sort.  Refreshing follows renames and newly opened or killed shells without moving point away from the selected shell.
+
 *** Viewport interaction
 
 Viewport is an alternative interface for composing prompts and viewing one request/response interaction at a time.  It uses a separate buffer named after its associated shell with =" [viewport]"= appended.  This buffer switches between =agent-shell-viewport-edit-mode= while composing and =agent-shell-viewport-view-mode= while reading.
