@@ -77,6 +77,33 @@ values are visible to the stubbed public APIs on subsequent refreshes."
       (should (equal (seq-elt (seq-first (map-elt tabulated-list-entries shell)) 1)
                      "blocked")))))
 
+(ert-deftest agent-shell-top-trims-column-widths-to-contents ()
+  (agent-shell-top-tests--with-shells
+    (let* ((shell (seq-first shells))
+           ;; All test buffer names are this wide, below the default 36.
+           (name-width (length (buffer-name shell)))
+           (width (lambda (name)
+                    (nth 1 (seq-find (lambda (column) (equal (car column) name))
+                                     tabulated-list-format)))))
+      (should (< name-width 36))
+      (should (= (funcall width "Buffer") name-width))
+      (should (= (funcall width "Status") 8))
+      (should (= (funcall width "Working directory") 0))
+      (goto-char (point-min))
+      (should (equal (seq-elt (tabulated-list-get-entry) 1)
+                     (buffer-substring-no-properties
+                      (+ (line-beginning-position) name-width 1)
+                      (+ (line-beginning-position) name-width 1
+                         (length (seq-elt (tabulated-list-get-entry) 1))))))
+      (with-current-buffer shell
+        (rename-buffer (make-string 50 ?x) t))
+      (agent-shell-top-refresh)
+      (should (= (funcall width "Buffer") 36))
+      (setq shells nil)
+      (agent-shell-top-refresh)
+      (should (= (funcall width "Buffer") (+ (length "Buffer") 2)))
+      (should (equal (seq-elt tabulated-list-format 0) '("Buffer" 8 t))))))
+
 (ert-deftest agent-shell-top-refresh-preserves-selection-after-rename ()
   (agent-shell-top-tests--with-shells
     (goto-char (point-min))
